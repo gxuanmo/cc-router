@@ -14,7 +14,7 @@ metadata:
 - API：POST /api/config（完整 YAML 写入+引号归一化）、POST /api/config/provider（结构化 provider 配置）
 - UI：Overview 快捷操作（复制 settings.json、测试 API、打开配置）、polished console 空状态
 - 测试：33/33 通过（PYTHONPATH=. pytest tests/ -v）
-- 最新提交 8ddf1b8 @ master
+- 最新提交 4c2983f @ master
 
 ## 2026-06-07 变更
 
