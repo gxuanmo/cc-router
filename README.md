@@ -16,7 +16,7 @@ python router.py
 
 ## Claude Code 配置
 
-让 Claude Code 走本地代理，别直连 DeepSeek：
+配置 Claude Code 走本地代理，代替直连后端：
 
 ```bash
 export ANTHROPIC_BASE_URL="http://127.0.0.1:8082"

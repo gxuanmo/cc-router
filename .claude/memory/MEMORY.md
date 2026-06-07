@@ -1,1 +1,1 @@
-- [项目状态](project-state.md) — 组件化前端上线、三主题系统、MiMo 路由修复
+- [项目状态](project-state.md) — Starlette 1.0+ lifespan 迁移、安全加固、33 测试全通过

@@ -34,7 +34,7 @@ python router.py                          # 启动
 curl http://127.0.0.1:8082/health         # 健康检查
 curl http://127.0.0.1:8082/api/stats      # 路由统计
 curl http://127.0.0.1:8082/api/presets    # 供应商列表
-PYTHONPATH=. pytest tests/ -v             # 单元测试（30 个用例）
+PYTHONPATH=. pytest tests/ -v             # 单元测试（33 个用例）
 ```
 
 ## E2E 冒烟测试

@@ -163,6 +163,7 @@ async def messages(req: Request) -> StreamingResponse | JSONResponse:
             proxy_headers = {"x-cc-router-backend": backend.provider, "x-cc-router-route": route_label}
             if resp.status_code != 200:
                 error_body = await resp.aread()
+                await resp.aclose()
                 _record(route_label, has_image, source_model, backend.model, backend.name, resp.status_code)
                 return Response(content=error_body, status_code=resp.status_code, media_type="application/json", headers=proxy_headers)
             _record(route_label, has_image, source_model, backend.model, backend.name, 200)
@@ -201,7 +202,8 @@ async def api_config_get(req: Request) -> JSONResponse:
         content = path.read_text(encoding="utf-8")
         return JSONResponse({"content": content, "mtime": path.stat().st_mtime})
     except OSError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=500)
+        logger.error("Failed to read config file: %s", exc)
+        return JSONResponse({"error": "Failed to read config file"}, status_code=500)
 
 
 async def api_config_post(req: Request) -> JSONResponse:
@@ -231,9 +233,11 @@ async def api_config_post(req: Request) -> JSONResponse:
         logger.info("Config saved via Web UI")
         return JSONResponse({"ok": True})
     except yaml.YAMLError as exc:
-        return JSONResponse({"ok": False, "error": f"YAML parse error: {exc}"}, status_code=400)
+        logger.error("YAML parse error: %s", exc)
+        return JSONResponse({"ok": False, "error": "YAML syntax error"}, status_code=400)
     except Exception as exc:
-        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+        logger.error("Failed to save config: %s", exc)
+        return JSONResponse({"ok": False, "error": "Failed to save config"}, status_code=400)
 
 
 async def api_config_provider_post(req: Request) -> JSONResponse:
@@ -289,9 +293,11 @@ async def api_config_provider_post(req: Request) -> JSONResponse:
         logger.info("Config updated via provider modal: %s → %s", role, provider)
         return JSONResponse({"ok": True})
     except yaml.YAMLError as exc:
-        return JSONResponse({"ok": False, "error": f"YAML error: {exc}"}, status_code=400)
+        logger.error("YAML error: %s", exc)
+        return JSONResponse({"ok": False, "error": "YAML syntax error"}, status_code=400)
     except Exception as exc:
-        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+        logger.error("Failed to update provider config: %s", exc)
+        return JSONResponse({"ok": False, "error": "Failed to update provider config"}, status_code=400)
 
 
 async def api_stats(req: Request) -> JSONResponse:
@@ -346,7 +352,11 @@ STATUS_PAGE_PATH = Path(__file__).with_name("index.html")
 
 def load_status_page() -> str:
     """Load the Web UI shell from disk."""
-    return STATUS_PAGE_PATH.read_text(encoding="utf-8")
+    try:
+        return STATUS_PAGE_PATH.read_text(encoding="utf-8")
+    except OSError as exc:
+        logger.error("Failed to load status page template: %s", exc)
+        return "<!DOCTYPE html><html><body><h1>Status page unavailable</h1></body></html>"
 
 
 # ── Management panel ──────────────────────────────────────────────

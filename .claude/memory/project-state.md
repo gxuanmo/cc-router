@@ -1,20 +1,27 @@
 ---
 name: cc-router-project-state
-description: cc-router 项目当前状态 — config save API、settings 模板导出、console 打磨、30 测试全通过
+description: cc-router 项目当前状态 — Starlette 1.0+ lifespan 迁移、安全加固、33 测试全通过
 metadata:
   type: project
 ---
 
-项目于 2026-06-01 完成 config save API、Claude Code settings 模板导出、Web UI console 打磨。2026-05-30 完成 Web UI 主题改造、MiMo 路由修复、5 code-review bug 修复。
+项目于 2026-06-07 完成 Starlette 1.0+ lifespan 迁移、安全加固（信息泄漏修复）。2026-06-01 完成 config save API、Claude Code settings 模板导出、Web UI console 打磨。2026-05-30 完成 Web UI 主题改造、MiMo 路由修复、5 code-review bug 修复。
 
 ## 当前状态
 
-- 后端：Python/Starlette，router.py 监听 127.0.0.1:8082
+- 后端：Python/Starlette，router.py 监听 127.0.0.1:8082，已迁移到 Starlette 1.0+ lifespan 模式
 - 前端：ES6 组件化 SPA，三主题（dark/light/midnight），Material Symbols 图标
 - API：POST /api/config（完整 YAML 写入+引号归一化）、POST /api/config/provider（结构化 provider 配置）
 - UI：Overview 快捷操作（复制 settings.json、测试 API、打开配置）、polished console 空状态
-- 测试：30/30 通过（PYTHONPATH=. pytest tests/ -v）
-- 最新提交 d207184 @ master
+- 测试：33/33 通过（PYTHONPATH=. pytest tests/ -v）
+- 最新提交 8ddf1b8 @ master
+
+## 2026-06-07 变更
+
+- **Starlette 1.0+ lifespan 迁移**：`add_event_handler("shutdown")` → `lifespan` async context manager，新增 `test_create_app_lifespan_provides_and_closes_http_client` 和 `test_main_reaches_uvicorn_run_without_legacy_event_handler` 测试
+- **安全加固**：5 处 `str(exc)` 信息泄漏 → 泛化错误消息 + 日志记录（api_config_get、api_config_post、api_config_provider_post ×2、YAML 解析）、流式错误路径新增 `resp.aclose()` 防连接池泄漏、`load_status_page()` 新增 try-catch
+- **依赖修复**：删除不存在的 `httpx2` 包
+- **文档同步**：CLAUDE.md/AGENTS.md 测试数量 30→33
 
 ## 2026-06-01 变更
 
