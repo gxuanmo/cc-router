@@ -89,9 +89,11 @@ Anthropic
 
 | 端点 | 说明 |
 |------|------|
+| `GET /` | 307 重定向到 `/status` |
 | `GET /status` | Web 管理面板（总览 / 路由日志 / 供应商 / 配置编辑 / API 检查 / 参数白名单） |
 | `GET /health` | JSON 健康检查 |
 | `GET /api/stats` | 路由统计 JSON |
-| `GET /api/config` | 读写 config.yaml |
+| `GET /api/config` | 读取 config.yaml |
+| `POST /api/config` | 写入 config.yaml |
 | `POST /api/config/provider` | 结构化更新后端配置（Web UI 弹窗用） |
 | `GET /api/presets` | 供应商预设列表 |

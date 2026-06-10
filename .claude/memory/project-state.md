@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-项目于 2026-06-07 完成 Starlette 1.0+ lifespan 迁移、安全加固（信息泄漏修复）。2026-06-01 完成 config save API、Claude Code settings 模板导出、Web UI console 打磨。2026-05-30 完成 Web UI 主题改造、MiMo 路由修复、5 code-review bug 修复。
+项目于 2026-06-10 新增根路径重定向、YAML 异常捕获加固。2026-06-07 完成 Starlette 1.0+ lifespan 迁移、安全加固（信息泄漏修复）。2026-06-01 完成 config save API、Claude Code settings 模板导出、Web UI console 打磨。2026-05-30 完成 Web UI 主题改造、MiMo 路由修复、5 code-review bug 修复。
 
 ## 当前状态
 
@@ -15,6 +15,12 @@ metadata:
 - UI：Overview 快捷操作（复制 settings.json、测试 API、打开配置）、polished console 空状态
 - 测试：33/33 通过（PYTHONPATH=. pytest tests/ -v）
 - 最新提交 4c2983f @ master
+
+## 2026-06-10 变更
+
+- **根路径重定向**：新增 `GET /` → 307 到 `/status`，解决访问根路径 404 问题
+- **YAML 异常捕获**：`config.py` `yaml.safe_load()` 新增 `yaml.YAMLError` 捕获，防止损坏的 YAML 文件导致裸奔异常
+- **.gitignore 补充**：新增 `node_modules/`、`package-lock.json`、`package.json` 排除
 
 ## 2026-06-07 变更
 

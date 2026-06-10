@@ -18,7 +18,7 @@ import uvicorn
 import yaml
 from starlette.applications import Starlette
 from starlette.requests import Request
-from starlette.responses import JSONResponse, HTMLResponse, Response, StreamingResponse, FileResponse
+from starlette.responses import JSONResponse, HTMLResponse, RedirectResponse, Response, StreamingResponse, FileResponse
 from starlette.routing import Route
 
 from config import BackendConfig, ConfigManager, LoggingConfig, PROVIDER_PRESETS, ServerConfig
@@ -361,6 +361,10 @@ def load_status_page() -> str:
 
 # ── Management panel ──────────────────────────────────────────────
 
+async def root_redirect(req: Request) -> RedirectResponse:
+    return RedirectResponse(url="/status")
+
+
 async def status_page(req: Request) -> HTMLResponse:
     return HTMLResponse(load_status_page(), headers=FRONTEND_NO_CACHE_HEADERS)
 
@@ -379,6 +383,7 @@ async def lifespan(app: Starlette):
 
 def create_app() -> Starlette:
     return Starlette(debug=False, routes=[
+        Route("/", root_redirect, methods=["GET"]),
         Route("/v1/messages", messages, methods=["POST"]),
         Route("/status", status_page, methods=["GET"]),
         Route("/health", health, methods=["GET"]),

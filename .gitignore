@@ -8,3 +8,6 @@ screenshot-*.png
 .claude/checkup-state.json
 .claude/checkup-reports/
 .review-*
+node_modules/
+package-lock.json
+package.json

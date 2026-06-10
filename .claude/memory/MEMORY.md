@@ -1,1 +1,1 @@
-- [项目状态](project-state.md) — Starlette 1.0+ lifespan 迁移、安全加固、33 测试全通过
+- [项目状态](project-state.md) — 根路径重定向、YAML 加固、Starlette 1.0+ lifespan、安全加固、33 测试全通过

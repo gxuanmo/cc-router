@@ -302,7 +302,10 @@ class ConfigManager:
                 raise FileNotFoundError(f"Config file not found: {self._path}")
 
         with open(self._path, encoding="utf-8") as fh:
-            raw = yaml.safe_load(fh)
+            try:
+                raw = yaml.safe_load(fh)
+            except yaml.YAMLError as exc:
+                raise ValueError(f"Invalid YAML in {self._path}: {exc}") from exc
 
         if not isinstance(raw, dict):
             raise ValueError(f"Config file must be a YAML mapping, got {type(raw).__name__}")
