@@ -215,6 +215,18 @@ PARAM_WHITELISTS: dict[str, set[str]] = {
         "metadata",
         "thinking",
     },
+    "modelscope": {
+        "model",
+        "messages",
+        "max_tokens",
+        "temperature",
+        "top_p",
+        "stop_sequences",
+        "stream",
+        "system",
+        "tools",
+        "tool_choice",
+    },
 }
 
 # ── Provider presets ─────────────────────────────────────────────────
@@ -315,11 +327,30 @@ class ConfigManager:
         if "multimodal" not in raw:
             raise ValueError("Config file missing required section: multimodal")
 
+        # Guard against YAML sections with null/empty values.
+        # Optional sections (server, logging) default to {} when omitted;
+        # required sections (text, multimodal) are guaranteed present by the
+        # checks above, but may be null in YAML.
+        def _require_mapping(raw_dict: dict, key: str, optional: bool = False) -> dict:
+            value = raw_dict.get(key)
+            if value is None:
+                if optional:
+                    return {}
+                raise ValueError(f"Config section '{key}' must be a mapping, got null")
+            if not isinstance(value, dict):
+                raise ValueError(f"Config section '{key}' must be a mapping, got {type(value).__name__}")
+            return value
+
+        server_raw = _require_mapping(raw, "server", optional=True)
+        text_raw = _require_mapping(raw, "text")
+        multimodal_raw = _require_mapping(raw, "multimodal")
+        logging_raw = _require_mapping(raw, "logging", optional=True)
+
         self._config = Config(
-            server=ServerConfig(**raw.get("server", {})),
-            text=BackendConfig(**raw.get("text", {})),
-            multimodal=BackendConfig(**raw.get("multimodal", {})),
-            logging=LoggingConfig(**raw.get("logging", {})),
+            server=ServerConfig(**server_raw),
+            text=BackendConfig(**text_raw),
+            multimodal=BackendConfig(**multimodal_raw),
+            logging=LoggingConfig(**logging_raw),
         )
         self._mtime = self._path.stat().st_mtime
         logger.info("Config loaded (text=%s, multimodal=%s)", self._config.text.name, self._config.multimodal.name)
@@ -334,7 +365,7 @@ class ConfigManager:
                 logger.info("Config file changed, reloading...")
                 return self.load()
         except OSError:
-            pass
+            logger.warning("Config file stat failed, using cached config")
         if self._config is None:
             return self.load()
         return self._config
@@ -348,4 +379,7 @@ class ConfigManager:
     @staticmethod
     def params_whitelist(provider: str) -> set[str]:
         base = ConfigManager._VARIANT_MAP.get(provider, provider)
-        return PARAM_WHITELISTS.get(base, PARAM_WHITELISTS["anthropic"])
+        if base in PARAM_WHITELISTS:
+            return PARAM_WHITELISTS[base]
+        logger.warning("No parameter whitelist for provider '%s', falling back to anthropic", provider)
+        return PARAM_WHITELISTS["anthropic"]

@@ -9,7 +9,7 @@ import re
 import sys
 import time
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -111,7 +111,7 @@ def validate_config_mapping(parsed: dict[str, Any]) -> str | None:
 
 
 def _record(route: str, has_image: bool, source_model: str, target_model: str, backend_name: str, status: int) -> None:
-    now = datetime.now(timezone(timedelta(hours=8))).strftime("%H:%M:%S")
+    now = datetime.now().strftime("%H:%M:%S")
     activity_log.append({
         "time": now, "route": route, "has_image": has_image,
         "source_model": source_model, "target_model": target_model,
@@ -160,10 +160,18 @@ async def messages(req: Request) -> StreamingResponse | JSONResponse:
     try:
         if is_stream:
             resp, _proxy_body = await connect_stream(client, backend, body, client_version)
-            proxy_headers = {"x-cc-router-backend": backend.provider, "x-cc-router-route": route_label}
+            # Forward operational backend headers in addition to router markers
+            proxy_headers = {
+                k: v for k, v in resp.headers.items()
+                if k.lower() not in {"transfer-encoding", "content-encoding", "content-length"}
+            }
+            proxy_headers["x-cc-router-backend"] = backend.provider
+            proxy_headers["x-cc-router-route"] = route_label
             if resp.status_code != 200:
-                error_body = await resp.aread()
-                await resp.aclose()
+                try:
+                    error_body = await resp.aread()
+                finally:
+                    await resp.aclose()
                 _record(route_label, has_image, source_model, backend.model, backend.name, resp.status_code)
                 return Response(content=error_body, status_code=resp.status_code, media_type="application/json", headers=proxy_headers)
             _record(route_label, has_image, source_model, backend.model, backend.name, 200)
@@ -187,7 +195,7 @@ async def messages(req: Request) -> StreamingResponse | JSONResponse:
         return JSONResponse({"error": "Backend request failed"}, status_code=502)
 
 
-async def health(req: Request) -> JSONResponse:
+def health(req: Request) -> JSONResponse:
     """GET /health — machine-readable health check."""
     return JSONResponse({"status": "ok", "uptime": int(time.monotonic() - start_time)})
 
@@ -227,7 +235,10 @@ async def api_config_post(req: Request) -> JSONResponse:
         if validation_error:
             return JSONResponse({"ok": False, "error": validation_error}, status_code=400)
         content = normalize_config_quotes(content)
-        config_mgr._path.write_text(content, encoding="utf-8")
+        # Write to temp file then atomically rename to avoid corruption on crash
+        tmp_path = config_mgr._path.with_suffix(".tmp")
+        tmp_path.write_text(content, encoding="utf-8")
+        tmp_path.replace(config_mgr._path)
         # Force reload on next request
         config_mgr._mtime = 0.0
         logger.info("Config saved via Web UI")
@@ -271,6 +282,12 @@ async def api_config_provider_post(req: Request) -> JSONResponse:
         if not isinstance(parsed, dict):
             parsed = {}
 
+        # Validate the new section would produce a valid config
+        merged = {**parsed, role: {"name": preset["name"], "base_url": base_url, "api_key": api_key, "model": model, "provider": provider}}
+        validation_error = validate_config_mapping(merged)
+        if validation_error:
+            return JSONResponse({"ok": False, "error": validation_error}, status_code=400)
+
         # Build the new section as YAML text (preserves comments in other sections)
         section_yaml = (
             f"{role}:\n"
@@ -288,7 +305,10 @@ async def api_config_provider_post(req: Request) -> JSONResponse:
             new_raw = raw.rstrip() + "\n\n" + section_yaml + "\n"
 
         new_raw = normalize_config_quotes(new_raw)
-        config_mgr._path.write_text(new_raw, encoding="utf-8")
+        # Write to temp file then atomically rename to avoid corruption on crash
+        tmp_path = config_mgr._path.with_suffix(".tmp")
+        tmp_path.write_text(new_raw, encoding="utf-8")
+        tmp_path.replace(config_mgr._path)
         config_mgr._mtime = 0.0
         logger.info("Config updated via provider modal: %s → %s", role, provider)
         return JSONResponse({"ok": True})
@@ -302,7 +322,11 @@ async def api_config_provider_post(req: Request) -> JSONResponse:
 
 async def api_stats(req: Request) -> JSONResponse:
     """GET /api/stats — routing statistics + recent activity."""
-    cfg = config_mgr.config
+    try:
+        cfg = config_mgr.config
+    except Exception as exc:
+        logger.error("Config load failed in api_stats: %s", exc)
+        return JSONResponse({"error": "Service unavailable: config invalid"}, status_code=503)
     return JSONResponse({
         "text": stats["text"],
         "multimodal": stats["multimodal"],
@@ -316,7 +340,7 @@ async def api_stats(req: Request) -> JSONResponse:
     })
 
 
-async def api_presets(req: Request) -> JSONResponse:
+def api_presets(req: Request) -> JSONResponse:
     """GET /api/presets — available provider presets."""
     return JSONResponse(PROVIDER_PRESETS)
 
@@ -348,12 +372,18 @@ async def serve_static(req: Request) -> Response:
 
 
 STATUS_PAGE_PATH = Path(__file__).with_name("index.html")
+_status_page_cache: tuple[float, str] = (0.0, "")  # (mtime, content)
 
 
 def load_status_page() -> str:
-    """Load the Web UI shell from disk."""
+    """Load the Web UI shell from disk, caching in memory between mtime changes."""
+    global _status_page_cache
     try:
-        return STATUS_PAGE_PATH.read_text(encoding="utf-8")
+        mtime = STATUS_PAGE_PATH.stat().st_mtime
+        if mtime > _status_page_cache[0]:
+            content = STATUS_PAGE_PATH.read_text(encoding="utf-8")
+            _status_page_cache = (mtime, content)
+        return _status_page_cache[1]
     except OSError as exc:
         logger.error("Failed to load status page template: %s", exc)
         return "<!DOCTYPE html><html><body><h1>Status page unavailable</h1></body></html>"
@@ -361,7 +391,7 @@ def load_status_page() -> str:
 
 # ── Management panel ──────────────────────────────────────────────
 
-async def root_redirect(req: Request) -> RedirectResponse:
+def root_redirect(req: Request) -> RedirectResponse:
     return RedirectResponse(url="/status")
 
 
