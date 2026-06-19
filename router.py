@@ -37,6 +37,17 @@ CONFIG_STRING_KEYS = {"api_key", "base_url", "host", "level", "model", "name", "
 CONFIG_SCALAR_RE = re.compile(r"^(\s*)([A-Za-z_][A-Za-z0-9_]*):\s*(.*?)\s*$")
 REQUIRED_BACKEND_FIELDS = ("name", "base_url", "api_key", "model", "provider")
 
+# Headers stripped from backend responses before forwarding to client.
+# transfer-encoding/content-encoding/content-length are recalculated by Starlette.
+# Infrastructure headers (server, cf-ray, x-envoy-*, etc.) leak backend internals.
+# set-cookie and www-authenticate are authentication-related and shouldn't proxy.
+_BACKEND_HEADER_DENYLIST = {
+    "transfer-encoding", "content-encoding", "content-length",
+    "server", "set-cookie", "www-authenticate",
+    "cf-ray", "x-powered-by", "x-amzn-requestid",
+    "x-envoy-upstream-service-time", "x-envoy-decorator-operation",
+}
+
 
 def _split_inline_comment(value: str) -> tuple[str, str]:
     for index, char in enumerate(value):
@@ -163,7 +174,7 @@ async def messages(req: Request) -> StreamingResponse | JSONResponse:
             # Forward operational backend headers in addition to router markers
             proxy_headers = {
                 k: v for k, v in resp.headers.items()
-                if k.lower() not in {"transfer-encoding", "content-encoding", "content-length"}
+                if k.lower() not in _BACKEND_HEADER_DENYLIST
             }
             proxy_headers["x-cc-router-backend"] = backend.provider
             proxy_headers["x-cc-router-route"] = route_label
@@ -181,7 +192,7 @@ async def messages(req: Request) -> StreamingResponse | JSONResponse:
 
         proxy_headers = {
             k: v for k, v in resp_headers.items()
-            if k.lower() not in {"transfer-encoding", "content-encoding", "content-length"}
+            if k.lower() not in _BACKEND_HEADER_DENYLIST
         }
         proxy_headers["x-cc-router-backend"] = backend.provider
         proxy_headers["x-cc-router-route"] = route_label
@@ -237,8 +248,14 @@ async def api_config_post(req: Request) -> JSONResponse:
         content = normalize_config_quotes(content)
         # Write to temp file then atomically rename to avoid corruption on crash
         tmp_path = config_mgr._path.with_suffix(".tmp")
-        tmp_path.write_text(content, encoding="utf-8")
-        tmp_path.replace(config_mgr._path)
+        try:
+            tmp_path.write_text(content, encoding="utf-8")
+            tmp_path.replace(config_mgr._path)
+        finally:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
         # Force reload on next request
         config_mgr._mtime = 0.0
         logger.info("Config saved via Web UI")
@@ -307,8 +324,14 @@ async def api_config_provider_post(req: Request) -> JSONResponse:
         new_raw = normalize_config_quotes(new_raw)
         # Write to temp file then atomically rename to avoid corruption on crash
         tmp_path = config_mgr._path.with_suffix(".tmp")
-        tmp_path.write_text(new_raw, encoding="utf-8")
-        tmp_path.replace(config_mgr._path)
+        try:
+            tmp_path.write_text(new_raw, encoding="utf-8")
+            tmp_path.replace(config_mgr._path)
+        finally:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
         config_mgr._mtime = 0.0
         logger.info("Config updated via provider modal: %s → %s", role, provider)
         return JSONResponse({"ok": True})
